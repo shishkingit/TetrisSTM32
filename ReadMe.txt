@@ -1,4 +1,4 @@
-# TetrisSTM32
+# TetroBlue
 STM32-Tetris project with ArduinoUNO and C++
 Later (maybe) IDE will be replaced with Clanq++ and Linker with ST-Link Utility.
 
