@@ -1,0 +1,461 @@
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>
+#include <Tone.h>
+
+// --- ПИНЫ ---
+#define TFT_CS PA4   // A4
+#define TFT_RST PA3   // A3
+#define TFT_DC PA2   // A2
+#define TFT_MOSI PA7  // A7
+#define TFT_SCLK PA5  // A5
+#define TFT_LED PA1   // A1
+#define TFT_MISO PA6  // A6
+
+#define JOY_X PB1   // B1
+#define JOY_Y PB0   // B0
+#define BUTTON_Y PA0   // A0
+#define BUTTON_X PC15  // C15
+#define BUTTON_A PC14  // C14
+#define BUTTON_B PC13  // C13
+#define BUTTON_START PA12  // A12
+#define BUTTON_SELECT PA8   // A8
+
+#define SPEAKER_PIN PB12  // B12
+
+// --- Параметры дисплея ---
+#define TFT_WIDTH 320
+#define TFT_HEIGHT 240
+
+// --- Цвета ---
+#define BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+#define GRAY    0x8430
+#define ORANGE  0xFD20 // Определяем оранжевый цвет
+
+// --- Создание объектов ---
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+//Tone tone1;
+
+// --- Глобальные переменные игры ---
+#define GRID_WIDTH 10
+#define GRID_HEIGHT 20
+int grid[GRID_WIDTH][GRID_HEIGHT]; // Игровое поле
+int currentPiece[4][2];       // Текущая фигура
+int currentPieceType;        // Тип текущей фигуры (0-6)
+int currentPieceRotation;    // Поворот текущей фигуры (0-3)
+int currentPieceX, currentPieceY; // Позиция текущей фигуры
+
+unsigned long lastDropTime = 0;
+unsigned long dropInterval = 1000; // Начальная скорость падения
+
+// --- Формы тетриса (7 штук) ---
+const int pieces[7][4][4][2] = {
+  // I
+  {{{0, 0}, {1, 0}, {2, 0}, {3, 0}},
+   {{1, 0}, {1, 1}, {1, 2}, {1, 3}},
+   {{0, 0}, {1, 0}, {2, 0}, {3, 0}},
+   {{1, 0}, {1, 1}, {1, 2}, {1, 3}}},
+  // J
+  {{{0, 0}, {0, 1}, {1, 1}, {2, 1}},
+   {{1, 0}, {2, 0}, {1, 1}, {1, 2}},
+   {{0, 1}, {1, 1}, {2, 1}, {2, 2}},
+   {{1, 0}, {1, 1}, {0, 2}, {1, 2}}},
+  // L
+  {{{2, 0}, {0, 1}, {1, 1}, {2, 1}},
+   {{1, 0}, {1, 1}, {1, 2}, {2, 2}},
+   {{0, 1}, {1, 1}, {2, 1}, {0, 2}},
+   {{0, 0}, {1, 0}, {1, 1}, {1, 2}}},
+  // O
+  {{{0, 0}, {1, 0}, {0, 1}, {1, 1}},
+   {{0, 0}, {1, 0}, {0, 1}, {1, 1}},
+   {{0, 0}, {1, 0}, {0, 1}, {1, 1}},
+   {{0, 0}, {1, 0}, {0, 1}, {1, 1}}},
+  // S
+  {{{1, 0}, {2, 0}, {0, 1}, {1, 1}},
+   {{0, 0}, {0, 1}, {1, 1}, {1, 2}},
+   {{1, 0}, {2, 0}, {0, 1}, {1, 1}},
+   {{0, 0}, {0, 1}, {1, 1}, {1, 2}}},
+  // T
+  {{{1, 0}, {0, 1}, {1, 1}, {2, 1}},
+   {{1, 0}, {0, 1}, {1, 1}, {1, 2}},
+   {{0, 1}, {1, 1}, {2, 1}, {1, 2}},
+   {{1, 0}, {1, 1}, {2, 1}, {1, 2}}},
+  // Z
+  {{{0, 0}, {1, 0}, {1, 1}, {2, 1}},
+   {{1, 0}, {0, 1}, {1, 1}, {0, 2}},
+   {{0, 0}, {1, 0}, {1, 1}, {2, 1}},
+   {{1, 0}, {0, 1}, {1, 1}, {0, 2}}}
+};
+
+// --- Переменные для графики ---
+#define BORDER_WIDTH 10 // Ширина границы
+#define GAME_OFFSET_X BORDER_WIDTH // Отступ игрового поля по X
+#define GAME_OFFSET_Y BORDER_WIDTH // Отступ игрового поля по Y
+#define BLOCK_SIZE 15 // Размер блока в пикселях
+
+// --- Переменные для счета ---
+long score = 0;
+
+// --- Переменная для паузы ---
+bool paused = false;
+
+// --- Функция инициализации ---
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TFT_LED, OUTPUT);
+  digitalWrite(TFT_LED, HIGH); // Включаем подсветку
+
+  pinMode(BUTTON_Y, INPUT_PULLUP);
+  pinMode(BUTTON_X, INPUT_PULLUP);
+  pinMode(BUTTON_A, INPUT_PULLUP);
+  pinMode(BUTTON_B, INPUT_PULLUP);
+  pinMode(BUTTON_START, INPUT_PULLUP);
+  pinMode(BUTTON_SELECT, INPUT_PULLUP);
+
+  //tone1.begin(SPEAKER_PIN);
+
+  tft.begin();
+  tft.setRotation(3); // Ориентация дисплея (0-3)
+  tft.fillScreen(BLACK);
+  tft.setTextSize(1);
+
+  initGame();
+}
+
+// --- Функция основного цикла ---
+void loop() {
+  handleInput();
+  if (!paused) {
+    if (millis() - lastDropTime > dropInterval) {
+      dropPiece();
+      lastDropTime = millis();
+    }
+    drawGame(); // Отрисовываем только если не на паузе
+  } else {
+    drawPauseScreen(); // Отображаем экран паузы
+  }
+}
+
+// --- Функции игры ---
+
+// Инициализация игрового поля и первой фигуры
+void initGame() {
+  for (int x = 0; x < GRID_WIDTH; x++) {
+    for (int y = 0; y < GRID_HEIGHT; y++) {
+      grid[x][y] = 0; // 0 - пусто
+    }
+  }
+  score = 0;
+  paused = false;
+  spawnNewPiece();
+}
+
+// Создание новой фигуры
+void spawnNewPiece() {
+  currentPieceType = random(7); // Выбираем случайный тип фигуры
+  currentPieceRotation = 0;     // Начальный поворот
+  currentPieceX = GRID_WIDTH / 2 - 2;   // Начальная позиция по X
+  currentPieceY = 0;           // Начальная позиция по Y
+
+  // Копируем координаты фигуры из массива pieces
+  for (int i = 0; i < 4; i++) {
+    currentPiece[i][0] = pieces[currentPieceType][currentPieceRotation][i][0];
+    currentPiece[i][1] = pieces[currentPieceType][currentPieceRotation][i][1];
+  }
+
+  // Проверяем, есть ли место для новой фигуры, если нет - конец игры
+  if (!canMove(0, 0)) {
+    gameOver();
+  }
+}
+
+// Обработка ввода с кнопок и джойстика
+void handleInput() {
+   // Пауза / возобновление игры по кнопке START
+  if (digitalRead(BUTTON_START) == LOW) {
+    paused = !paused; // Инвертируем состояние паузы
+    delay(200); // Убираем дребезг кнопки
+
+    // Отображаем сообщение о паузе
+    if (paused) {
+      drawPauseScreen();
+    }
+    while(digitalRead(BUTTON_START) == LOW); //ждем пока кнопка отожмется, чтобы не было повторного входа
+    return; // Выходим из функции, чтобы не обрабатывать ввод во время паузы
+  }
+
+  if (paused) return; // Если игра на паузе, ничего не делаем
+
+  if (digitalRead(BUTTON_X) == LOW) {
+    movePiece(-1, 0); // Движение влево
+    delay(100);
+  }
+  if (digitalRead(BUTTON_Y) == LOW) {
+    movePiece(1, 0); // Движение вправо
+    delay(100);
+  }
+  if (digitalRead(BUTTON_A) == LOW) {
+    rotatePiece(1); // Поворот по часовой стрелке
+    delay(200);
+  }
+  if (digitalRead(BUTTON_B) == LOW) {
+    dropPiece(); // Быстрое падение вниз
+    delay(50);
+  }
+
+  if (digitalRead(BUTTON_SELECT) == LOW) {
+    initGame(); // Рестарт игры
+    delay(200);
+  }
+
+  // Считывание джойстика
+  int joyX = analogRead(JOY_X);
+  int joyY = analogRead(JOY_Y);
+
+  // Движение джойстиком (настраивайте пороги чувствительности)
+  if (joyX < 200) {
+    movePiece(-1, 0);
+    delay(100);
+  } else if (joyX > 800) {
+    movePiece(1, 0);
+    delay(100);
+  }
+}
+
+// Движение фигуры
+void movePiece(int dx, int dy) {
+  if (canMove(dx, dy)) {
+    currentPieceX += dx;
+    currentPieceY += dy;
+  }
+}
+
+// Поворот фигуры
+void rotatePiece(int direction) {
+  int newRotation = (currentPieceRotation + direction) % 4;
+  if (newRotation < 0) newRotation += 4; // Обработка отрицательных значений
+
+  // Временный массив для хранения повернутой фигуры
+  int tempPiece[4][2];
+  for (int i = 0; i < 4; i++) {
+    tempPiece[i][0] = pieces[currentPieceType][newRotation][i][0];
+    tempPiece[i][1] = pieces[currentPieceType][newRotation][i][1];
+  }
+
+  // Проверяем, можно ли повернуть фигуру в этой позиции
+  int originalPieceX = currentPieceX;
+  int originalPieceY = currentPieceY;
+  currentPieceX = originalPieceX;
+  currentPieceY = originalPieceY;
+
+  if (canRotate(newRotation)) {
+    currentPieceRotation = newRotation;
+      for (int i = 0; i < 4; i++) {
+        currentPiece[i][0] = pieces[currentPieceType][currentPieceRotation][i][0];
+        currentPiece[i][1] = pieces[currentPieceType][currentPieceRotation][i][1];
+      }
+  }
+}
+
+// Проверка возможности движения фигуры
+bool canMove(int dx, int dy) {
+  if (!paused) {
+      for (int i = 0; i < 4; i++) {
+        int newX = currentPieceX + currentPiece[i][0] + dx;
+        int newY = currentPieceY + currentPiece[i][1] + dy;
+
+        if (newX < 0 || newX >= GRID_WIDTH || newY >= GRID_HEIGHT || (newY >= 0 && grid[newX][newY] != 0)) {
+          return false;
+        }
+      }
+      return true;
+  } else {
+    return false;
+  }
+}
+
+// Проверка возможности поворота фигуры
+bool canRotate(int newRotation) {
+  if (!paused) {
+    for (int i = 0; i < 4; i++) {
+      int newX = currentPieceX + pieces[currentPieceType][newRotation][i][0];
+      int newY = currentPieceY + pieces[currentPieceType][newRotation][i][1];
+
+      if (newX < 0 || newX >= GRID_WIDTH || newY >= GRID_HEIGHT || (newY >= 0 && grid[newX][newY] != 0)) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// Падение фигуры вниз
+void dropPiece() {
+  if (!paused) {
+    if (canMove(0, 1)) {
+      movePiece(0, 1);
+    } else {
+      // Фигура достигла дна или другой фигуры
+      fixPiece();
+      int linesRemoved = removeFullLines();
+      updateScore(linesRemoved);
+      spawnNewPiece();
+    }
+  }
+}
+
+// Фиксация фигуры на игровом поле
+void fixPiece() {
+  for (int i = 0; i < 4; i++) {
+    int x = currentPieceX + currentPiece[i][0];
+    int y = currentPieceY + currentPiece[i][1];
+    if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+      grid[x][y] = currentPieceType + 1; // Записываем тип фигуры + 1 (чтобы не было 0)
+    }
+  }
+}
+
+// Удаление заполненных линий
+int removeFullLines() {
+  int linesRemovedCount = 0;
+  for (int y = GRID_HEIGHT - 1; y >= 0; y--) {
+    bool fullLine = true;
+    for (int x = 0; x < GRID_WIDTH; x++) {
+      if (grid[x][y] == 0) {
+        fullLine = false;
+        break;
+      }
+    }
+
+    if (fullLine) {
+      linesRemovedCount++;
+      // Сдвигаем все линии выше вниз
+      for (int i = y; i > 0; i--) {
+        for (int x = 0; x < GRID_WIDTH; x++) {
+          grid[x][i] = grid[x][i - 1];
+        }
+      }
+      // Обнуляем верхнюю линию
+      for (int x = 0; x < GRID_WIDTH; x++) {
+        grid[x][0] = 0;
+      }
+      // Проверяем эту же линию еще раз (т.к. на нее сдвинулась верхняя)
+      y++;
+    }
+  }
+  return linesRemovedCount;
+}
+
+// Обновление счета
+void updateScore(int linesRemoved) {
+  switch (linesRemoved) {
+    case 1: score += 40; break;
+    case 2: score += 100; break;
+    case 3: score += 300; break;
+    case 4: score += 1200; break;
+  }
+}
+
+// Конец игры
+void gameOver() {
+  tft.fillScreen(RED);
+  tft.setTextColor(WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(50, 100);
+  tft.println("Game Over!");
+  tft.setTextSize(2);
+  tft.setCursor(50, 150);
+  tft.println("Press SELECT");
+  tft.println("to restart");
+
+  // Бесконечный цикл, пока не будет нажата кнопка SELECT
+  while (digitalRead(BUTTON_SELECT) == HIGH) {
+    delay(100);
+  }
+  initGame();
+}
+
+// --- Графические функции ---
+
+// Отображение экрана паузы
+void drawPauseScreen() {
+  tft.fillScreen(BLACK);
+  tft.setTextColor(WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(50, 100);
+  tft.println("PAUSED");
+  tft.setTextSize(2);
+  tft.setCursor(50, 150);
+  tft.println("Press START");
+  tft.println("to continue");
+}
+
+// Отрисовка игры
+void drawGame() {
+  tft.fillScreen(BLACK);
+
+  // Рисуем границы игрового поля
+  tft.fillRect(0, 0, TFT_WIDTH, BORDER_WIDTH, WHITE); // Верхняя
+  tft.fillRect(0, 0, BORDER_WIDTH, TFT_HEIGHT, WHITE); // Левая
+  tft.fillRect(TFT_WIDTH - BORDER_WIDTH, 0, BORDER_WIDTH, TFT_HEIGHT, WHITE); // Правая
+  tft.fillRect(0, TFT_HEIGHT - BORDER_WIDTH, TFT_WIDTH, BORDER_WIDTH, WHITE); // Нижняя
+
+  // Отрисовка игрового поля
+  for (int x = 0; x < GRID_WIDTH; x++) {
+    for (int y = 0; y < GRID_HEIGHT; y++) {
+      if (grid[x][y] != 0) {
+        drawBlock(x, y, getColor(grid[x][y] - 1)); // -1 т.к. в grid хранится тип + 1
+      }
+    }
+  }
+
+  // Отрисовка текущей фигуры
+  for (int i = 0; i < 4; i++) {
+    int x = currentPieceX + currentPiece[i][0];
+    int y = currentPieceY + currentPiece[i][1];
+    if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+      drawBlock(x, y, getColor(currentPieceType));
+    }
+  }
+
+  // Вывод счета
+  tft.setTextColor(WHITE);
+  tft.setTextSize(2);
+  tft.setCursor(TFT_WIDTH - BORDER_WIDTH - 90, 30); // Позиция для счета
+  tft.print("Score: ");
+  tft.println(score);
+}
+
+// Отрисовка одного блока
+void drawBlock(int x, int y, uint16_t color) {
+  int block_size = 15; // Размер блока в пикселях
+  int offset_x = 20;   // Отступ игрового поля по X
+  int offset_y = 20;   // Отступ игрового поля по Y
+
+  tft.fillRect(offset_x + x * block_size, offset_y + y * block_size, block_size, block_size, color);
+  tft.drawRect(offset_x + x * block_size, offset_y + y * block_size, block_size, block_size, GRAY);
+}
+
+// Получение цвета для фигуры
+uint16_t getColor(int pieceType) {
+  switch (pieceType) {
+    case 0: return CYAN;   // I
+    case 1: return BLUE;   // J
+    case 2: return YELLOW; // L
+    case 3: return ORANGE; // O
+    case 4: return GREEN;  // S
+    case 5: return MAGENTA;// T
+    case 6: return RED;    // Z
+    default: return WHITE;
+  }
+}
