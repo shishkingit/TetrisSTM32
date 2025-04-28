@@ -4,6 +4,7 @@
 #include <Tone.h>
 
 // --- ПИНЫ ---
+// Дисплей
 #define TFT_CS PA4   // A4
 #define TFT_RST PA3   // A3
 #define TFT_DC PA2   // A2
@@ -11,7 +12,7 @@
 #define TFT_SCLK PA5  // A5
 #define TFT_LED PA1   // A1
 #define TFT_MISO PA6  // A6
-
+// Кнопки
 #define JOY_X PB1   // B1
 #define JOY_Y PB0   // B0
 #define BUTTON_Y PA0   // A0
@@ -20,14 +21,14 @@
 #define BUTTON_B PC13  // C13
 #define BUTTON_START PA12  // A12
 #define BUTTON_SELECT PA8   // A8
-
+// Спикер
 #define SPEAKER_PIN PB12  // B12
 
-// --- Параметры дисплея ---
+// Параметры дисплея
 #define TFT_WIDTH 320
 #define TFT_HEIGHT 240
 
-// --- Цвета ---
+// Цвета
 #define BLACK   0x0000
 #define BLUE    0x001F
 #define RED     0xF800
@@ -37,13 +38,13 @@
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 #define GRAY    0x8430
-#define ORANGE  0xFD20 // Определяем оранжевый цвет
+#define ORANGE  0xFD20
 
-// --- Создание объектов ---
+//Создание объектов
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 //Tone tone1;
 
-// --- Глобальные переменные игры ---
+// Глобальные переменные
 #define GRID_WIDTH 10
 #define GRID_HEIGHT 20
 int grid[GRID_WIDTH][GRID_HEIGHT]; // Игровое поле
@@ -55,7 +56,7 @@ int currentPieceX, currentPieceY; // Позиция текущей фигуры
 unsigned long lastDropTime = 0;
 unsigned long dropInterval = 1000; // Начальная скорость падения
 
-// --- Формы тетриса (7 штук) ---
+// Формы фигур
 const int pieces[7][4][4][2] = {
   // I
   {{{0, 0}, {1, 0}, {2, 0}, {3, 0}},
@@ -94,16 +95,16 @@ const int pieces[7][4][4][2] = {
    {{1, 0}, {0, 1}, {1, 1}, {0, 2}}}
 };
 
-// --- Переменные для графики ---
+// Переменные для графики
 #define BORDER_WIDTH 10 // Ширина границы
 #define GAME_OFFSET_X BORDER_WIDTH // Отступ игрового поля по X
 #define GAME_OFFSET_Y BORDER_WIDTH // Отступ игрового поля по Y
 #define BLOCK_SIZE 15 // Размер блока в пикселях
 
-// --- Переменные для счета ---
+// Переменная для счета
 long score = 0;
 
-// --- Переменная для паузы ---
+// Переменная для паузы
 bool paused = false;
 
 // --- Функция инициализации ---
@@ -130,7 +131,7 @@ void setup() {
   initGame();
 }
 
-// --- Функция основного цикла ---
+// Основной цикл
 void loop() {
   handleInput();
   if (!paused) {
@@ -144,7 +145,7 @@ void loop() {
   }
 }
 
-// --- Функции игры ---
+// Функции игры
 
 // Инициализация игрового поля и первой фигуры
 void initGame() {
@@ -212,7 +213,7 @@ void handleInput() {
   }
 
   if (digitalRead(BUTTON_SELECT) == LOW) {
-    initGame(); // Рестарт игры
+    initGame(); // Рестарт
     delay(200);
   }
 
@@ -220,7 +221,7 @@ void handleInput() {
   int joyX = analogRead(JOY_X);
   int joyY = analogRead(JOY_Y);
 
-  // Движение джойстиком (настраивайте пороги чувствительности)
+  // Движение джойстиком (ТРЕБУЕТСЯ НАСТРОЙКА)
   if (joyX < 200) {
     movePiece(-1, 0);
     delay(100);
@@ -385,8 +386,7 @@ void gameOver() {
   initGame();
 }
 
-// --- Графические функции ---
-
+// Графические функции
 // Отображение экрана паузы
 void drawPauseScreen() {
   tft.fillScreen(BLACK);
