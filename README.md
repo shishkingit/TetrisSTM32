@@ -1,6 +1,6 @@
 # TetrisSTM32
 STM32-Tetris project with ArduinoUNO and C++
-Later IDE will be replaced with Clanq++ and ST-Link Uploader.
+Later (maybe) IDE will be replaced with Clanq++ and Linker with ST-Link Utility.
 
 Software you need:
 -Arduino UNO
