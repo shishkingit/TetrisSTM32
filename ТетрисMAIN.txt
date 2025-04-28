@@ -19,13 +19,13 @@
 #define BUTTON_B PC13  // c13
 #define BUTTON_START PA12  // a12
 #define BUTTON_SELECT PA8   // a8
-#define SPEAKER_PIN PB12
+#define SPEAKER_PIN PB12 // добавлен пин для динамика
 
 // параметры дисплея
 #define TFT_WIDTH 320
 #define TFT_HEIGHT 240
 
-// цвета 
+// цвета
 #define BLACK   0x0000
 #define BLUE    0x001F
 #define RED     0xF800
@@ -35,7 +35,9 @@
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 #define GRAY    0x8430
-#define ORANGE  0xFD20 // определяем оранжевый цвет
+
+// определяем оранжевый цвет
+#define ORANGE  0xFD20
 
 // массив цветов для фигур
 const uint16_t pieceColors[] = {CYAN, BLUE, YELLOW, ORANGE, GREEN, MAGENTA, RED};
@@ -44,21 +46,22 @@ const uint16_t pieceColors[] = {CYAN, BLUE, YELLOW, ORANGE, GREEN, MAGENTA, RED}
 // создание объектов
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
-// глобальные переменные
+// глобальные переменные игры
 #define GRID_WIDTH 10
 #define GRID_HEIGHT 14
 int grid[GRID_WIDTH][GRID_HEIGHT]; // игровое поле
+int previousGrid[GRID_WIDTH][GRID_HEIGHT]; // предыдущее состояние игрового поля
 int currentPiece[4][2];       // текущая фигура
 int currentPieceType;        // тип текущей фигуры (0-6)
 int currentPieceRotation;    // поворот текущей фигуры (0-3)
 int currentPieceX, currentPieceY; // позиция текущей фигуры
-
+int previousPieceX, previousPieceY; // предыдущая позиция фигуры
 int nextPieceType; // тип следующей фигуры
 
 unsigned long lastDropTime = 0;
 unsigned long dropInterval = 1000; // начальная скорость падения
 
-// размеры и формы тетриса
+// размеры и формы тетриса (7 штук)
 const int pieces[7][4][4][2] = {
   // i
   {{{0, 0}, {1, 0}, {2, 0}, {3, 0}}, {{1, 0}, {1, 1}, {1, 2}, {1, 3}},
@@ -89,20 +92,22 @@ const int pieces[7][4][4][2] = {
 #define GAME_OFFSET_Y BORDER_WIDTH // отступ игрового поля по y
 #define BLOCK_SIZE 15 // размер блока в пикселях
 
-// координаты отображения следующей фигуры 
-#define NEXT_PIECE_X (TFT_WIDTH - BORDER_WIDTH - 120)
+// новые координаты области "next"
+#define NEXT_PIECE_X (TFT_WIDTH - BORDER_WIDTH - 120) // same x as score
 #define NEXT_PIECE_Y 120
 
+// переменные для счета
 long score = 0;
 
+// переменная для паузы
 bool paused = false;
 
-// инициализация
+// функция инициализации
 void setup() {
   Serial.begin(9600);
 
   pinMode(TFT_LED, OUTPUT);
-  digitalWrite(TFT_LED, HIGH);
+  digitalWrite(TFT_LED, HIGH); // включаем подсветку
 
   pinMode(BUTTON_Y, INPUT_PULLUP);
   pinMode(BUTTON_X, INPUT_PULLUP);
@@ -110,7 +115,7 @@ void setup() {
   pinMode(BUTTON_B, INPUT_PULLUP);
   pinMode(BUTTON_START, INPUT_PULLUP);
   pinMode(BUTTON_SELECT, INPUT_PULLUP);
-  pinMode(SPEAKER_PIN, OUTPUT);
+  pinMode(SPEAKER_PIN, OUTPUT); // инициализируем пин динамика как выход
 
   tft.begin();
   tft.setRotation(3); // ориентация дисплея (0-3)
@@ -121,7 +126,7 @@ void setup() {
   initGame();
 }
 
-// основной цикл
+// функция основного цикла
 void loop() {
   handleInput();
 
@@ -136,16 +141,21 @@ void loop() {
   }
 }
 
-//функции игры
+// функции игры
 
 // инициализация игрового поля и первой фигуры
 void initGame() {
   memset(grid, 0, sizeof(grid)); // быстрая очистка массива
+  memset(previousGrid, 0, sizeof(previousGrid)); // очистка предыдущего состояния поля
   score = 0;
   paused = false;
   currentPieceType = random(NUM_PIECE_COLORS);
   nextPieceType = random(NUM_PIECE_COLORS);  // генерируем тип следующей фигуры
   spawnNewPiece();
+
+  // инициализируем начальные координаты фигуры
+  previousPieceX = currentPieceX;
+  previousPieceY = currentPieceY;
 }
 
 // создание новой фигуры
@@ -165,6 +175,10 @@ void spawnNewPiece() {
   if (!canMove(0, 0)) {
     gameOver();
   }
+
+  // обновляем предыдущие координаты фигуры
+  previousPieceX = currentPieceX;
+  previousPieceY = currentPieceY;
 }
 
 // обработка ввода с кнопок и джойстика
@@ -174,12 +188,13 @@ void handleInput() {
   if (digitalRead(BUTTON_A) == LOW) rotatePiece(1);
   if (digitalRead(BUTTON_B) == LOW) dropPiece();
 
-  if (digitalRead(BUTTON_START) == LOW) { // пауза/возобновление игры
+  if (digitalRead(BUTTON_START) == LOW) { // пауза / возобновление игры
     paused = !paused;
 
-    // ждем, пока кнопка не будет отпущена
+    // ждем, пока кнопка не будет отпущена, чтобы избежать дребезга
     while (digitalRead(BUTTON_START) == LOW);
 
+    // не вызываем drawpausescreen() здесь.  он будет вызываться в loop().
     return;
   }
   if (digitalRead(BUTTON_SELECT) == LOW) initGame(); // рестарт игры
@@ -192,8 +207,16 @@ void handleInput() {
 // движение фигуры
 void movePiece(int dx, int dy) {
   if (canMove(dx, dy)) {
+    // сначала стираем фигуру в старой позиции
+    erasePiece(previousPieceX, previousPieceY, currentPieceType, currentPieceRotation);
+
+    // обновляем координаты
     currentPieceX += dx;
     currentPieceY += dy;
+
+    // обновляем предыдущие координаты
+    previousPieceX = currentPieceX;
+    previousPieceY = currentPieceY;
   }
 }
 
@@ -210,10 +233,30 @@ void rotatePiece(int direction) {
   }
 
   if (canRotate(newRotation)) {
+    // сначала стираем фигуру в старой позиции
+    erasePiece(previousPieceX, previousPieceY, currentPieceType, currentPieceRotation);
+
     currentPieceRotation = newRotation;
     for (int i = 0; i < 4; i++) {
       currentPiece[i][0] = pieces[currentPieceType][currentPieceRotation][i][0];
       currentPiece[i][1] = pieces[currentPieceType][currentPieceRotation][i][1];
+    }
+
+    // обновляем предыдущие координаты
+    previousPieceX = currentPieceX;
+    previousPieceY = currentPieceY;
+  }
+}
+
+// стирание фигуры в старой позиции
+void erasePiece(int x, int y, int pieceType, int rotation) {
+  for (int i = 0; i < 4; i++) {
+    int eraseX = x + pieces[pieceType][rotation][i][0];
+    int eraseY = y + pieces[pieceType][rotation][i][1];
+
+    if (eraseX >= 0 && eraseX < GRID_WIDTH && eraseY >= 0 && eraseY < GRID_HEIGHT) {
+      // Сначала закрашиваем блок черным цветом (внутреннюю часть)
+      drawBlock(eraseX, eraseY, BLACK);
     }
   }
 }
@@ -265,7 +308,7 @@ void fixPiece() {
     int x = currentPieceX + currentPiece[i][0];
     int y = currentPieceY + currentPiece[i][1];
     if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
-      grid[x][y] = currentPieceType + 1; // записываем тип фигуры + 1 во избежании нуля
+      grid[x][y] = currentPieceType + 1; // записываем тип фигуры + 1
     }
   }
   playSound(440, 100); // воспроизводим звук при фиксации фигуры
@@ -283,17 +326,17 @@ void removeFullLines() {
     }
 
     if (fullLine) {
-      // Сдвигаем все линии *выше* текущей вниз
+      // сдвигаем все линии выше вниз
       for (int i = y; i > 0; i--) {
         for(int x = 0; x < GRID_WIDTH; x++){
           grid[x][i] = grid[x][i-1];
         }
       }
-      // Очищаем самую верхнюю линию
+      // очищаем самую верхнюю линию
       for (int x = 0; x < GRID_WIDTH; x++) {
         grid[x][0] = 0;
       }
-      y++; // Проверяем эту же строку снова, так как она заполнена новой строкой
+      y++; // проверяем эту же строку снова, так как она заполнена новой строкой
     }
   }
 }
@@ -342,25 +385,25 @@ void drawPauseScreen() {
 
 // отрисовка игры
 void drawGame() {
-  tft.fillScreen(BLACK);
-
-  // рисуем границу вокруг игрового поля
-  int gameAreaX1 = GAME_OFFSET_X - 2; // левая граница
-  int gameAreaY1 = GAME_OFFSET_Y - 2; // верхняя граница
-  int gameAreaX2 = GAME_OFFSET_X + GRID_WIDTH * BLOCK_SIZE + 2; // правая граница
-  int gameAreaY2 = GAME_OFFSET_Y + GRID_HEIGHT * BLOCK_SIZE + 2; // нижняя граница
-  tft.drawRect(gameAreaX1, gameAreaY1, gameAreaX2 - gameAreaX1, gameAreaY2 - gameAreaY1, WHITE);
-
-  // отрисовка игрового поля
+  // отрисовываем только изменившиеся блоки
   for (int x = 0; x < GRID_WIDTH; x++) {
     for (int y = 0; y < GRID_HEIGHT; y++) {
-      if (grid[x][y] != 0) {
-        drawBlock(x, y, getColor(grid[x][y] - 1)); // -1 т.к. в grid хранится тип + 1
+      if (grid[x][y] != previousGrid[x][y]) {
+        // блок изменился, перерисовываем его
+        if (grid[x][y] == 0) {
+          // блок стал пустым, рисуем черным
+          drawBlock(x, y, BLACK);
+        } else {
+          // блок занят, рисуем цветом фигуры
+          drawBlock(x, y, getColor(grid[x][y] - 1));
+        }
+        // обновляем previousGrid
+        previousGrid[x][y] = grid[x][y];
       }
     }
   }
 
-  // отрисовка текущей фигуры
+  // отрисовываем текущую фигуру
   for (int i = 0; i < 4; i++) {
     int x = currentPieceX + currentPiece[i][0];
     int y = currentPieceY + currentPiece[i][1];
@@ -369,8 +412,8 @@ void drawGame() {
     }
   }
 
-  // отрисовка следующей фигуры
-  drawNextPiece(nextPieceType);
+  // отрисовываем границу игрового поля
+  drawBorders();
 
   // вывод счета
   tft.setTextColor(WHITE);
@@ -388,6 +431,15 @@ void drawBlock(int x, int y, uint16_t color) {
   tft.drawRect(pixelX, pixelY, BLOCK_SIZE, BLOCK_SIZE, GRAY);
 }
 
+// отрисовка границы игрового поля
+void drawBorders() {
+    int gameAreaX1 = GAME_OFFSET_X - 2; // левая граница
+    int gameAreaY1 = GAME_OFFSET_Y - 2; // верхняя граница
+    int gameAreaX2 = GAME_OFFSET_X + GRID_WIDTH * BLOCK_SIZE + 2; // правая граница
+    int gameAreaY2 = GAME_OFFSET_Y + GRID_HEIGHT * BLOCK_SIZE + 2; // нижняя граница
+    tft.drawRect(gameAreaX1, gameAreaY1, gameAreaX2 - gameAreaX1, gameAreaY2 - gameAreaY1, WHITE);
+}
+
 // получение цвета для фигуры
 uint16_t getColor(int pieceType) {
   return pieceColors[pieceType % NUM_PIECE_COLORS];
@@ -395,16 +447,17 @@ uint16_t getColor(int pieceType) {
 
 // функция для отрисовки следующей фигуры
 void drawNextPiece(int pieceType) {
+  // выводим текст "next:" в нужном месте
   tft.setTextColor(WHITE);
   tft.setTextSize(2);
-  tft.setCursor(NEXT_PIECE_X, NEXT_PIECE_Y - 20);
+  tft.setCursor(NEXT_PIECE_X, NEXT_PIECE_Y - 20);  // отодвигаем текст немного вверх
   tft.println("Next:");
 
   // отрисовываем следующую фигуру
   for (int i = 0; i < 4; i++) {
     int x = pieces[pieceType][0][i][0];
     int y = pieces[pieceType][0][i][1];
-    int pixelX = NEXT_PIECE_X + x * BLOCK_SIZE; // выравнивание
+    int pixelX = NEXT_PIECE_X + x * BLOCK_SIZE; // используем next_piece_x для выравнивания
     int pixelY = NEXT_PIECE_Y + y * BLOCK_SIZE;
 
     tft.fillRect(pixelX, pixelY, BLOCK_SIZE, BLOCK_SIZE, getColor(pieceType));
@@ -422,7 +475,7 @@ void playSound(int frequency, int duration) {
 // функция для воспроизведения звука окончания игры
 void playGameOverSound() {
   int melody[] = {
-    570, 659, 0, 0, 0, 659, 0, 520,
+    440, 659, 0, 0, 0, 659, 0, 520,
     0, 479, 0, 419, 0, 378, 0, 359,
     0, 0, 350, 0, 350
   };
@@ -433,8 +486,8 @@ void playGameOverSound() {
   };
 
   for (int i = 0; i < sizeof(melody) / sizeof(melody[0]); i++) {
-    tone(SPEAKER_PIN, melody[i], 500/durations[i]); 
-    delay(500 / durations[i] * 1.30);
+    tone(SPEAKER_PIN, melody[i], 500 / durations[i]); // применили формулу для длительности
+    delay(500 / durations[i]);  // задержка между нотами
     noTone(SPEAKER_PIN);
     delay(10);
   }
