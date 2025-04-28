@@ -3,7 +3,7 @@
 #include <Adafruit_ILI9341.h>
 #include <Tone.h>
 
-// ПИНЫ
+// --- ПИНЫ ---
 // Дисплей
 #define TFT_CS PA4   // A4
 #define TFT_RST PA3   // A3
@@ -373,7 +373,7 @@ void gameOver() {
   tft.setTextColor(WHITE);
   tft.setTextSize(3);
   tft.setCursor(50, 100);
-  tft.println("WASTED");
+  tft.println("Game Over!");
   tft.setTextSize(2);
   tft.setCursor(50, 150);
   tft.println("Press SELECT");
@@ -406,12 +406,13 @@ void drawPauseScreen() {
 // Отрисовка игры
 void drawGame() {
   tft.fillScreen(BLACK);
+  // Рисуем границу вокруг игрового поля
+  int gameAreaX1 = GAME_OFFSET_X + 9; // Левая граница
+  int gameAreaY1 = GAME_OFFSET_Y - 2; // Верхняя граница
+  int gameAreaX2 = GAME_OFFSET_X + GRID_WIDTH * BLOCK_SIZE + 12; // Правая граница
+  int gameAreaY2 = GAME_OFFSET_Y + GRID_HEIGHT * BLOCK_SIZE + 10; // Нижняя граница
 
-  // Рисуем границы игрового поля
-  tft.fillRect(0, 0, TFT_WIDTH, BORDER_WIDTH, WHITE); // Верхняя
-  tft.fillRect(0, 0, BORDER_WIDTH, TFT_HEIGHT, WHITE); // Левая
-  tft.fillRect(TFT_WIDTH - BORDER_WIDTH, 0, BORDER_WIDTH, TFT_HEIGHT, WHITE); // Правая
-  tft.fillRect(0, TFT_HEIGHT - BORDER_WIDTH, TFT_WIDTH, BORDER_WIDTH, WHITE); // Нижняя
+   tft.drawRect(gameAreaX1, gameAreaY1, gameAreaX2 - gameAreaX1, gameAreaY2 - gameAreaY1, WHITE);
 
   // Отрисовка игрового поля
   for (int x = 0; x < GRID_WIDTH; x++) {
