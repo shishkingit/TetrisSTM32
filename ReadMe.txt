@@ -6,14 +6,20 @@ Later (maybe) IDE will be replaced with Clanq++ and Linker with ST-Link Utility.
 
 "Case.m3d" is Compas-3D(V14)-compatible 3D case for that project with USB-C for charging, SD-reader for .vex-format games (maybe later), and 4 pins for uploading a code on MCU
 
+-------------------
+
 Software you need:
--Arduino UNO
-  Libraries for UNO:
+-Arduino IDE
+{
+  Libraries for IDE:
   -Adafruit GFX Library 
   -Adafruit ILI9341
+}
 
 Board settings:
 STM32 Core -> Generic STM32F1 Series -> STM32F103C8 
+
+-------------------
 
 Hardware you need:
 -STM32F103C8T6 Blue Pill
