@@ -29,4 +29,4 @@ Hardware you need:
 -1 speaker 
 -ST-Link programmer
 -a lot of wires
-Optional: USB-C to 3,3v converter board + battery (2x1000mah in my variant)
+Optional: USB-C to 3,3v converter board + battery (1000mah in my variant)
