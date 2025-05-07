@@ -1,10 +1,9 @@
 # TetroBlue
-STM32-Tetris project with ArduinoUNO and C++
-Later (maybe) IDE will be replaced with Clanq++ and Linker with ST-Link Utility.
+STM32-Tetris project
 
 "Scheme.png" you can see the schematics and pins
 
-"Case.m3d" is Compas-3D(V14)-compatible 3D case for that project with USB-C for charging, SD-reader for .vex-format games (maybe later), and 4 pins for uploading a code on MCU
+"Case.m3d" is Compas-3D(V14)-compatible 3D case for that project with USB-C for charging, SD-reader for .vex-format games (maybe later), and 4 pins for ST-link programmer
 
 -------------------
 
